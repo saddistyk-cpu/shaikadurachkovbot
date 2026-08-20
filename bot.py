@@ -43,13 +43,13 @@ async def cmd_start(message: Message):
         "Просто введите в поле ввода: `@имя_бота ключевое слово`"
     )
 
-# Обработка добавления голосовых администратором
-@dp.message(F.from_user.id == ADMIN_ID)
+# Обработка добавления голосовых администратором (СТРОГО В ЛИЧНЫХ СООБЩЕНИЯХ)
+@dp.message(F.from_user.id == ADMIN_ID, F.chat.type == "private")
 async def handle_admin_voice_upload(message: Message):
     file_id = None
     keywords_text = ""
 
-    # ВАРИАНТ 1: Вы сделали ОТВЕТ (REPLY) текстом на аудио/голосовое/документ
+    # ВАРИАНТ 1: Вы сделали ОТВЕТ (REPLY) текстом на аудио/голосовое/документ в ЛС бота
     if message.reply_to_message:
         reply = message.reply_to_message
         
@@ -63,7 +63,7 @@ async def handle_admin_voice_upload(message: Message):
             
         keywords_text = message.text
 
-    # ВАРИАНТ 2: Вы ПЕРЕСЛАЛИ/ОТПРАВИЛИ файл и успели написать подпись в том же сообщении
+    # ВАРИАНТ 2: Вы ОТПРАВИЛИ файл напрямую в ЛС бота и успели написать подпись в том же сообщении
     elif message.caption:
         if message.voice:
             file_id = message.voice.file_id
@@ -74,18 +74,15 @@ async def handle_admin_voice_upload(message: Message):
             
         keywords_text = message.caption
 
-    # Подсказка для админа: строго если файл прислан БЕЗ подписи и ТОЛЬКО в ЛС бота
-    elif message.chat.type == "private" and (
-        message.voice or message.audio or 
-        (message.document and message.document.mime_type and message.document.mime_type.startswith("audio/"))
-    ):
+    # Подсказка для админа: если файл прислан БЕЗ подписи в ЛС бота
+    elif message.voice or message.audio or (message.document and message.document.mime_type and message.document.mime_type.startswith("audio/")):
         await message.answer(
             "Файл получен! Чтобы привязать к нему ключевые слова:\n"
             "**Сделайте ОТВЕТ (reply)** на это сообщение и напишите ключевые слова через запятую."
         )
         return
     else:
-        # В группах или если это обычный текст админа — просто пропускаем код в текстовый поиск
+        # Если это обычный текст админа — просто пропускаем код дальше в текстовый поиск
         pass
 
     # Если файл и ключевые слова успешно определены, сохраняем в базу
@@ -93,8 +90,7 @@ async def handle_admin_voice_upload(message: Message):
         keywords = [kw.strip().lower() for kw in keywords_text.split(",") if kw.strip()]
         
         if not keywords:
-            if message.chat.type == "private":
-                await message.answer("Ошибка: Не найдено ни одного валидного ключевого слова.")
+            await message.answer("Ошибка: Не найдено ни одного валидного ключевого слова.")
             return
 
         # Записываем в базу
@@ -144,7 +140,7 @@ async def inline_voice_handler(inline_query: InlineQuery):
     await inline_query.answer(results, is_personal=False, cache_time=1)
 
 # Обычные текстовые сообщения (поиск по ключевым словам внутри ЛС бота)
-@dp.message(F.text)
+@dp.message(F.text, F.chat.type == "private")
 async def reply_with_voice(message: Message):
     user_text = message.text.strip().lower()
     for keyword, file_id in voice_db.items():
